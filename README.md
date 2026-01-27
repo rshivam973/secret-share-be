@@ -5,6 +5,7 @@ A secure Node.js/Express backend for anonymous messaging with end-to-end encrypt
 ## Features
 
 - **User Authentication**: Secure registration and login with bcrypt password hashing
+- **JWT Authentication**: Access tokens (30min) and refresh tokens (1day) for secure API access
 - **Message Encryption**: Fernet symmetric encryption for all messages
 - **Anonymous Messaging**: Send encrypted messages to users by username
 - **Auto Keep-Alive**: Prevents server sleep on free-tier hosting platforms
@@ -52,7 +53,23 @@ DATABASE=mongodb+srv://username:password@cluster.mongodb.net/dbname
 PORT=5000
 MESSAGE_SECRET_KEY=your-fernet-encryption-key-here
 DEPLOYED_BACKEND_URL=https://your-deployed-backend-url.com
+
+# JWT Configuration
+JWT_ACCESS_SECRET=your-jwt-access-secret-here
+JWT_REFRESH_SECRET=your-jwt-refresh-secret-here
+JWT_ACCESS_EXPIRY=30m
+JWT_REFRESH_EXPIRY=1d
 ```
+
+### JWT Secrets
+
+The `.env.example` file includes pre-generated JWT secrets. For production, generate your own using:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+Run this command twice to generate both `JWT_ACCESS_SECRET` and `JWT_REFRESH_SECRET`.
 
 ### Generating Encryption Key
 
@@ -104,6 +121,33 @@ The server will start on `http://localhost:5000` (or your specified PORT).
   {
     "email": "john@example.com",
     "password": "password123"
+  }
+  ```
+  **Response**:
+  ```json
+  {
+    "message": "Login successful",
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "_id": "...",
+      "Name": "John Doe",
+      "username": "johndoe",
+      "email": "john@example.com"
+    }
+  }
+  ```
+
+- **POST** `/refresh-token` - Refresh access token
+  ```json
+  {
+    "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+  }
+  ```
+  **Response**:
+  ```json
+  {
+    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
   }
   ```
 
