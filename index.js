@@ -13,7 +13,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended:true }));
 app.use(cors());
 
-mongoose.connect(`${DB}/SecretShareDB`,{useNewUrlParser:true})
+mongoose.connect(DB,{useNewUrlParser:true})
 .then(()=>{
     console.log("database connected")
 
