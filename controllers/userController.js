@@ -75,6 +75,44 @@ const sendMessage = async (req, res) => {
     }
 };
 
+// @desc    Get current user details
+// @route   GET /me
+// @access  Protected
+const getCurrentUser = async (req, res) => {
+    try {
+        const userId = req.userId;
+        const user = await User.findById(userId).select('-password'); // Exclude password
+
+        if (user) {
+            // Decrypt messages before sending
+            const decryptedMessages = user.messages.map(msg => {
+                try {
+                    const token = new fernet.Token({ secret: secret, token: msg.content, ttl: 0 });
+                    return {
+                        ...msg.toObject(),
+                        content: token.decode()
+                    };
+                } catch (err) {
+                    console.error("Decryption error for message:", msg._id, err);
+                    return {
+                        ...msg.toObject(),
+                        content: "[Encrypted Message]"
+                    };
+                }
+            });
+
+            const userObj = user.toObject();
+            userObj.messages = decryptedMessages;
+            res.json(userObj);
+        } else {
+            res.status(404).json({ message: 'User not found' });
+        }
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
 // @desc    Check if user exists
 // @route   GET /check-user/:username
 // @access  Public
@@ -92,4 +130,4 @@ const checkUser = async (req, res) => {
     }
 };
 
-module.exports = { getUserDetails, sendMessage, checkUser };
+module.exports = { getUserDetails, sendMessage, checkUser, getCurrentUser };

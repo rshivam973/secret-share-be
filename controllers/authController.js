@@ -1,4 +1,6 @@
 const User = require('../models/User');
+const { generateAccessToken, generateRefreshToken } = require('../utils/tokenUtils');
+
 
 // @desc    Register a new user
 // @route   POST /register
@@ -35,7 +37,7 @@ const registerUser = async (req, res) => {
     }
 };
 
-// @desc    Auth user & get token (No token implementation yet, just login)
+// @desc    Auth user & get JWT tokens
 // @route   POST /login
 // @access  Public
 const loginUser = async (req, res) => {
@@ -45,13 +47,14 @@ const loginUser = async (req, res) => {
         const user = await User.findOne({ email });
 
         if (user && (await user.matchPassword(password))) {
+            // Generate tokens
+            const accessToken = generateAccessToken(user._id);
+            const refreshToken = generateRefreshToken(user._id);
+
             res.status(200).json({
-                message: 'Login successful', user: {
-                    _id: user._id,
-                    Name: user.Name,
-                    username: user.username,
-                    email: user.email
-                }
+                message: 'Login successful',
+                access_token: accessToken,
+                refresh_token: refreshToken
             });
         } else {
             res.status(401).json({ message: 'Invalid email or password' });
@@ -62,4 +65,29 @@ const loginUser = async (req, res) => {
     }
 };
 
-module.exports = { registerUser, loginUser };
+// @desc    Refresh access token
+// @route   POST /refresh-token
+// @access  Public
+const refreshToken = async (req, res) => {
+    const { refresh_token } = req.body;
+
+    if (!refresh_token) {
+        return res.status(400).json({ message: 'Refresh token required' });
+    }
+
+    try {
+        const { verifyRefreshToken } = require('../utils/tokenUtils');
+        const decoded = verifyRefreshToken(refresh_token);
+
+        // Generate new access token
+        const newAccessToken = generateAccessToken(decoded.userId);
+
+        res.status(200).json({
+            access_token: newAccessToken
+        });
+    } catch (error) {
+        res.status(401).json({ message: error.message || 'Invalid or expired refresh token' });
+    }
+};
+
+module.exports = { registerUser, loginUser, refreshToken };
