@@ -1,18 +1,12 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
-const messageSchema = new mongoose.Schema({
-    content: String,
-    timestamp: { type: Date, default: Date.now }
-});
-
 const userSchema = new mongoose.Schema({
     Name: String,
     username: { type: String, unique: true }, // Added unique constraint hint
     email: { type: String, unique: true },    // Added unique constraint hint
-    password: String,
+    password: String
     // confirmPassword field is generally not saved to DB, handled in controller/validation
-    messages: [messageSchema]
 });
 
 // Encrypt password using bcrypt before saving
