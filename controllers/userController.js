@@ -1,4 +1,5 @@
 const User = require('../models/User');
+const Message = require('../models/Message');
 const fernet = require('fernet');
 require('dotenv').config();
 
@@ -14,26 +15,7 @@ const getUserDetails = async (req, res) => {
         const user = await User.findOne({ email }).select('-password'); // Exclude password
 
         if (user) {
-            // Decrypt messages before sending
-            const decryptedMessages = user.messages.map(msg => {
-                try {
-                    const token = new fernet.Token({ secret: secret, token: msg.content, ttl: 0 });
-                    return {
-                        ...msg.toObject(),
-                        content: token.decode()
-                    };
-                } catch (err) {
-                    console.error("Decryption error for message:", msg._id, err);
-                    return {
-                        ...msg.toObject(),
-                        content: "[Encrypted Message]"
-                    };
-                }
-            });
-
-            const userObj = user.toObject();
-            userObj.messages = decryptedMessages;
-            res.json(userObj);
+            res.json(user);
         } else {
             res.status(404).json({ message: 'User not found' });
         }
@@ -48,7 +30,7 @@ const getUserDetails = async (req, res) => {
 // @access  Public
 const sendMessage = async (req, res) => {
     const recipientUsername = req.params.username;
-    const { content } = req.body;
+    const { content, senderName } = req.body;
 
     try {
         const recipientUser = await User.findOne({ username: recipientUsername });
@@ -61,12 +43,14 @@ const sendMessage = async (req, res) => {
         const token = new fernet.Token({ secret: secret });
         const encryptedContent = token.encode(content);
 
-        const newMessage = {
-            content: encryptedContent,
-        };
+        // Create new message document in Message collection
+        const newMessage = new Message({
+            recipient: recipientUser._id,
+            senderName: senderName || 'Anonymous',
+            content: encryptedContent
+        });
 
-        recipientUser.messages.push(newMessage);
-        await recipientUser.save();
+        await newMessage.save();
 
         res.status(200).json({ message: 'Message sent successfully' });
     } catch (err) {
@@ -84,26 +68,7 @@ const getCurrentUser = async (req, res) => {
         const user = await User.findById(userId).select('-password'); // Exclude password
 
         if (user) {
-            // Decrypt messages before sending
-            const decryptedMessages = user.messages.map(msg => {
-                try {
-                    const token = new fernet.Token({ secret: secret, token: msg.content, ttl: 0 });
-                    return {
-                        ...msg.toObject(),
-                        content: token.decode()
-                    };
-                } catch (err) {
-                    console.error("Decryption error for message:", msg._id, err);
-                    return {
-                        ...msg.toObject(),
-                        content: "[Encrypted Message]"
-                    };
-                }
-            });
-
-            const userObj = user.toObject();
-            userObj.messages = decryptedMessages;
-            res.json(userObj);
+            res.json(user);
         } else {
             res.status(404).json({ message: 'User not found' });
         }
@@ -130,4 +95,67 @@ const checkUser = async (req, res) => {
     }
 };
 
-module.exports = { getUserDetails, sendMessage, checkUser, getCurrentUser };
+// @desc    Get user's messages with pagination
+// @route   GET /messages?page=1&pageSize=10
+// @access  Protected
+const getUserMessages = async (req, res) => {
+    try {
+        const userId = req.userId;
+
+        // Get pagination params from query, set defaults
+        const page = parseInt(req.query.page) || 1;
+        const pageSize = parseInt(req.query.pageSize) || 10;
+
+        // Validate pagination params
+        const currentPage = page < 1 ? 1 : page;
+        const itemsPerPage = pageSize < 1 ? 10 : pageSize;
+
+        // Get total count of messages for this user
+        const totalCount = await Message.countDocuments({ recipient: userId });
+
+        // Calculate pagination values
+        const totalPages = Math.ceil(totalCount / itemsPerPage);
+        const skip = (currentPage - 1) * itemsPerPage;
+
+        // Fetch paginated messages for the authenticated user
+        const messages = await Message.find({ recipient: userId })
+            .sort({ timestamp: -1 })
+            .skip(skip)
+            .limit(itemsPerPage)
+            .select('-__v');
+
+        // Decrypt messages before sending
+        const decryptedMessages = messages.map(msg => {
+            try {
+                const token = new fernet.Token({ secret: secret, token: msg.content, ttl: 0 });
+                return {
+                    ...msg.toObject(),
+                    content: token.decode()
+                };
+            } catch (err) {
+                console.error("Decryption error for message:", msg._id, err);
+                return {
+                    ...msg.toObject(),
+                    content: "[Encrypted Message]"
+                };
+            }
+        });
+
+        res.json({
+            messages: decryptedMessages,
+            pagination: {
+                totalCount: totalCount,
+                currentPage: currentPage,
+                totalPages: totalPages,
+                itemsPerPage: itemsPerPage,
+                hasNextPage: currentPage < totalPages,
+                hasPreviousPage: currentPage > 1
+            }
+        });
+    } catch (error) {
+        console.error(error);
+        res.status(500).json({ message: 'Internal server error' });
+    }
+};
+
+module.exports = { getUserDetails, sendMessage, checkUser, getCurrentUser, getUserMessages };
